@@ -1,0 +1,236 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,booktabs,graphicx,xcolor,enumitem}
+\usepackage[hidelinks]{hyperref}
+\setlist[itemize]{leftmargin=*,nosep,topsep=3pt}
+\setlength{\emergencystretch}{2em}
+
+\newcommand{\todo}[1]{\par\smallskip\noindent
+  {\color{blue!60!black}\textit{[TODO: #1]}}\par\smallskip}
+\newcommand{\degc}{\ensuremath{{}^{\circ}\mathrm{C}}}
+
+\title{Short-Term Temperature Forecasting with Jena Climate Data}
+\author{Kareem Washington \and John Aramis Scott}
+\date{CSCI 6840: Data Mining \quad Fall 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent\textit{Skeleton: replace this outline with one paragraph of
+100 to 150 words.}
+\begin{itemize}
+  \item Problem: does historical weather information improve temperature
+  forecasts beyond temperature history alone?
+  \item Approach: cleaned hourly Jena observations. 24-hour histories.
+  Persistence, linear regression, and random forest at 1, 6, and 24 hours.
+  \item Evaluation: chronological training through 2014, validation in 2015,
+  and held-out 2016 MAE/RMSE on matched examples.
+  \item Finding to summarize: weather inputs reduced RMSE by 5.3 to 9.4\%
+  within the same method. Linear regression led at 1/6 hours and the forest
+  narrowly led at 24 hours. End with the one-station/one-test-year limitation.
+\end{itemize}
+\end{abstract}
+
+\section{Introduction and Problem Statement}
+\label{sec:introduction}
+\textbf{Research question.} Do historical weather measurements improve
+1-, 6-, and 24-hour temperature forecasts beyond past temperature alone?
+\todo{Write a short motivation paragraph about temperature forecasting for
+energy or agricultural planning. These are potential applications.
+The project did not measure operational benefits.}
+\begin{itemize}
+  \item Define the task as supervised time-series regression: forecast a
+  future hourly mean temperature in \degc{} using information available at
+  the forecast origin.
+  \item State the objectives: compare learned methods with persistence.
+  Isolate the benefit of weather inputs within each method. Examine how
+  errors and large misses change with forecast horizon.
+  \item Close with a brief approach/contribution summary: cleaned data,
+  lagged features, chronological evaluation, and 15 matched comparisons.
+\end{itemize}
+
+\section{Background and Related Work}
+\label{sec:background}
+\todo{Write one concise paragraph on
+Gaddam and Jafari's Jena study~\cite{gaddam}: ARIMA/SARIMA and Box-Jenkins
+models, seasonal structure, and external predictors. Verify the final
+publication year and manuscript version before submission.}
+\begin{itemize}
+  \item Position our work as a controlled comparison of lagged linear
+  regression and random forest, rather than a reproduction of that study.
+  Do not compare its published scores numerically with ours: evaluation
+  periods, horizons, and predictor availability differ.
+  \item Briefly explain persistence as a transparent benchmark and the
+  difference between a weighted linear predictor and an ensemble of trees.
+  Connect historical windows and preprocessing to course
+  forecasting material~\cite{course}.
+\end{itemize}
+
+\section{Methodology}
+\label{sec:methods}
+\subsection{Data and Preprocessing}
+\todo{Turn these verified implementation facts into a compact paragraph.
+Cite the Jena data source~\cite{jena}.}
+\begin{itemize}
+  \item 420,551 raw 10-minute records and 14 weather variables. Remove
+  327 exact duplicates before hourly aggregation.
+  \item Mask sensor values $\leq -999$. Retain hours with six distinct
+  timestamps. Compute right-labeled hourly means and circular mean wind
+  direction. Result: 70,034 hourly records, with gaps preserved.
+  \item The hourly series ends January 1, 2017. That endpoint is outside
+  the 2016 test targets. Fit median imputation on training data only.
+  Also fit training-only scaling for linear regression.
+\end{itemize}
+
+\subsection{Forecast Targets, Features, and Models}
+At origin $t$, the input window contains the latest completed hour and the
+previous 23 hours. Each horizon has a separate direct prediction model:
+\[
+  \widehat{T}_{t+h}=f_h(\mathbf{x}_{t-23},\ldots,\mathbf{x}_{t}),
+  \qquad h\in\{1,6,24\}\text{ hours}.
+\]
+\begin{itemize}
+  \item Temperature-only inputs: 24 features. Weather inputs: 336 features
+  ($24\times14$), including temperature, pressure, humidity, dew point,
+  and wind. Align histories and targets by timestamp across missing hours.
+  \item Persistence: $\widehat{T}_{t+h}=T_t$. Learned methods:
+  ordinary linear regression and random forest via scikit-learn~\cite{sklearn}.
+  \item Forest: 100 trees, minimum leaf size 2, feature fraction 0.33,
+  seed 6840. Select depth 12 or 18 by validation RMSE for each input/horizon
+  pair. Selected depths were 18 at 1/6 hours and 12 at 24 hours.
+\end{itemize}
+\todo{Explain why these models and the common 24-hour window make a useful
+comparison. Mention Python, pandas, NumPy, Matplotlib, and joblib, and
+complete their citations. Focus on the key implementation decisions.}
+
+\section{Experiments and Results}
+\label{sec:results}
+\subsection{Experimental Setup and Metrics}
+\begin{itemize}
+  \item Partition chronologically by target time: 2009 to 2014 training,
+  2015 validation, 2016 test. Freeze settings before test scoring.
+  Final models remain fitted on training data without a validation refit.
+  \item At each origin, use observed history then available. This evaluates
+  repeated direct forecasts, rather than a year-long recursive forecast.
+  \item Five configurations per horizon: persistence plus two learned
+  methods with two input sets. All five share the same test timestamps
+  within a horizon: $n=8{,}685$, $8{,}675$, and $8{,}639$, respectively.
+\end{itemize}
+For errors $e_i=\widehat{T}_i-T_i$, report
+$\mathrm{MAE}=n^{-1}\sum_i|e_i|$ and
+$\mathrm{RMSE}=\sqrt{n^{-1}\sum_i e_i^2}$ in \degc{}. Lower is better.
+RMSE is the primary comparison. Optionally report $R^2$.
+
+\subsection{Main Comparisons}
+Table~\ref{tab:results} summarizes the test scores.
+\todo{Explain what the scores demonstrate: weather helps within both
+methods at every horizon. Compare gains over persistence separately from
+gains over temperature-only inputs. Calculate percentages before rounding.}
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\caption{Held-out 2016 errors in \degc{}. Each cell is MAE / RMSE.
+Bold marks the lowest observed RMSE at each horizon.
+Values are rounded to three decimal places.}
+\label{tab:results}
+\begin{tabular}{llccc}
+\toprule
+Method & Inputs & 1 hour & 6 hours & 24 hours \\
+\midrule
+Persistence & Latest temperature & 0.659 / 0.918 & 3.106 / 4.105 & 2.456 / 3.224 \\
+Linear regression & Temperature & 0.400 / 0.581 & 1.699 / 2.230 & 2.459 / 3.157 \\
+Linear regression & Weather & \textbf{0.383 / 0.550} & \textbf{1.552 / 2.020} & 2.286 / 2.942 \\
+Random forest & Temperature & 0.438 / 0.624 & 1.675 / 2.201 & 2.423 / 3.111 \\
+Random forest & Weather & 0.400 / 0.573 & 1.568 / 2.040 & \textbf{2.260 / 2.918} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{itemize}
+  \item Best observed RMSE reductions from persistence: 40.1\%, 50.8\%,
+  and 9.5\% at 1, 6, and 24 hours.
+  \item Within-method RMSE reductions from weather inputs: linear
+  regression 5.3/9.4/6.8\%. Forest 8.2/7.3/6.2\% in horizon order.
+  \item The forest's 24-hour advantage over weather-input linear regression
+  is about 0.024\degc{} RMSE. No statistical significance test was performed.
+  Temperature-only linear regression slightly worsens 24-hour MAE relative
+  to persistence, so avoid claiming every learned model wins on every metric.
+\end{itemize}
+
+\subsection{Forecast Example and Error Analysis}
+\begin{figure}[htbp]
+\centering
+\fbox{\parbox[c][0.65in][c]{0.88\linewidth}{\centering
+Figure placeholder: observed vs. predicted temperature\\
+Insert a 24-hour forecast plot for the first test week.}}
+
+\caption{Planned example: 24-hour forecasts and observations during the
+first test week of 2016, plotted at target time. Each prediction uses
+information available 24 hours earlier.}
+\label{fig:forecast}
+\end{figure}
+\todo{Discuss Figure~\ref{fig:forecast} after inserting the plot. Explain
+the January 7 warming miss (9.16\degc{} for the weather-input forest) and
+contrast its 2.26\degc{} MAE with its 5.88\degc{} 95th-percentile absolute
+error. The percentile describes observed test errors, not a prediction
+interval. The example week illustrates behavior. Annual scores establish
+overall accuracy.}
+
+\section{Discussion and Conclusion}
+\label{sec:discussion}
+\todo{Write one or two concise paragraphs from the following prompts.}
+\begin{itemize}
+  \item What worked: extra weather history improved both learned methods.
+  Linear regression remained competitive. Answer the research question
+  within the scope of this experiment.
+  \item Challenges/lessons: duplicate records, missing timestamps, sensor
+  sentinels, wind angles, and leakage control required explicit decisions.
+  Explain one concrete challenge and its implemented solution.
+  \item What did not work as well: large day-ahead misses remained.
+  Persistence's 24-hour error was lower than its 6-hour error. A daily
+  cycle is a possible explanation that was not tested directly.
+  \item Limits: one station, one held-out year, one history length, small
+  forest search, correlated predictors, no per-variable ablation or
+  uncertainty analysis. A small forest advantage does not establish
+  significance, and model ranking alone does not prove overfitting.
+  \item Future work: seasonal-naive baselines, calendar/circular wind
+  features, alternative history lengths, rolling time splits, additional
+  years/stations, and uncertainty estimates. Distinguish these proposed
+  extensions from completed experiments.
+\end{itemize}
+
+\clearpage
+\begin{thebibliography}{9}
+\bibitem{gaddam}
+D. C. Gaddam and R. Jafari,
+``Temperature Forecasting on the Jena Climate Dataset Using SARIMA and
+Box-Jenkins Models,'' in \textit{Proceedings of the Future Technologies
+Conference (FTC) 2025, Volume 3}, pp. 320 to 340.
+\href{https://doi.org/10.1007/978-3-032-07995-4_22}{doi:10.1007/978-3-032-07995-4\_22}.
+
+\bibitem{jena}
+Max Planck Institute for Biogeochemistry,
+\textit{Jena Climate 2009 to 2016}, weather-station observations,
+distributed through the TensorFlow/Keras dataset archive.
+\url{https://storage.googleapis.com/tensorflow/tf-keras-datasets/jena_climate_2009_2016.csv.zip}.
+
+\bibitem{sklearn}
+F. Pedregosa et al., ``Scikit-learn: Machine Learning in Python,''
+\textit{Journal of Machine Learning Research}, vol. 12,
+pp. 2825 to 2830, 2011.
+\url{https://jmlr.org/papers/v12/pedregosa11a.html}.
+
+\bibitem{course}
+H. Hedayati, \textit{CSCI 6840 Data Mining: Forecasting and Data
+Preprocessing}, course lecture slides, Fall 2026.
+
+\bibitem{software}
+\textit{Software citation placeholder.}
+\todo{Add official citations for Python, pandas, NumPy, Matplotlib, and
+joblib in the same numbered style. Include the software versions used and replace this placeholder entry.}
+\end{thebibliography}
+\end{document}
